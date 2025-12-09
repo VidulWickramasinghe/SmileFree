@@ -1,20 +1,25 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Stethoscope, Lock } from 'lucide-react';
+import { Stethoscope, Lock, Mail } from 'lucide-react';
 
 export const Login: React.FC = () => {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const { login } = useAuth();
+  const { login, error } = useAuth();
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (login(password)) {
+    setLoading(true);
+    try {
+      await login(email, password);
       navigate('/dashboard');
-    } else {
-      setError('Invalid Access Code. (Try: ortho123)');
+    } catch (e) {
+      // Error handled in AuthContext
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -32,7 +37,21 @@ export const Login: React.FC = () => {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-lg font-medium text-slate-700 dark:text-slate-300 mb-2">Access Code</label>
+            <label className="block text-lg font-medium text-slate-700 dark:text-slate-300 mb-2">Doctor's Email</label>
+            <div className="relative">
+              <Mail className="absolute left-4 top-4 h-6 w-6 text-slate-400" />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full pl-14 pr-4 py-4 text-xl border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-4 focus:ring-teal-500/20 focus:border-teal-500 outline-none"
+                placeholder="doctor@example.com"
+                required
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-lg font-medium text-slate-700 dark:text-slate-300 mb-2">Password</label>
             <div className="relative">
               <Lock className="absolute left-4 top-4 h-6 w-6 text-slate-400" />
               <input
@@ -41,7 +60,7 @@ export const Login: React.FC = () => {
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full pl-14 pr-4 py-4 text-xl border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-4 focus:ring-teal-500/20 focus:border-teal-500 outline-none"
                 placeholder="Enter password"
-                autoFocus
+                required
               />
             </div>
           </div>
@@ -54,9 +73,10 @@ export const Login: React.FC = () => {
 
           <button
             type="submit"
-            className="w-full flex justify-center py-4 px-4 border border-transparent rounded-xl shadow-lg text-lg font-bold text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 transition-colors"
+            disabled={loading}
+            className="w-full flex justify-center py-4 px-4 border border-transparent rounded-xl shadow-lg text-lg font-bold text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 transition-colors disabled:opacity-70"
           >
-            Access Dashboard
+            {loading ? 'Authenticating...' : 'Access Dashboard'}
           </button>
         </form>
         

@@ -4,33 +4,50 @@ import { Navigate } from 'react-router-dom';
 import { getAppointments, updateAppointmentStatus } from '../services/db';
 import { notifyPatientStatusChange } from '../services/email';
 import { Appointment, AppointmentStatus } from '../types';
-import { Check, X, Clock, Calendar, Phone, Search, Download, TrendingUp, Users } from 'lucide-react';
+import { Check, X, Clock, Calendar, Phone, Search, Download, RefreshCw } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, logout } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [filter, setFilter] = useState<AppointmentStatus | 'ALL'>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const refreshData = () => {
-    setAppointments(getAppointments().reverse()); // Newest first
+  // Function to load data from Firestore/Local
+  const loadData = async () => {
+    setLoading(true);
+    const data = await getAppointments();
+    // Sort by date (newest first)
+    data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    setAppointments(data);
+    setLoading(false);
   };
 
   useEffect(() => {
-    refreshData();
-  }, []);
+    if (isAuthenticated) {
+      loadData();
+    }
+  }, [isAuthenticated]);
 
   if (!isAuthenticated) {
     return <Navigate to="/login" />;
   }
 
   const handleStatusChange = async (appt: Appointment, status: AppointmentStatus) => {
-    setLoading(true);
-    updateAppointmentStatus(appt.id, status);
-    await notifyPatientStatusChange(appt, status);
-    refreshData();
-    setLoading(false);
+    // Optimistic update
+    const updatedAppointments = appointments.map(a => 
+      a.id === appt.id ? { ...a, status } : a
+    );
+    setAppointments(updatedAppointments);
+
+    try {
+      await updateAppointmentStatus(appt.id, status);
+      await notifyPatientStatusChange(appt, status);
+    } catch (error) {
+      console.error("Failed to update status", error);
+      // Revert if failed
+      loadData(); 
+    }
   };
 
   const exportCSV = () => {
@@ -63,7 +80,6 @@ export const Dashboard: React.FC = () => {
     return matchesFilter && matchesSearch;
   });
 
-  // Stats
   const today = new Date().toISOString().split('T')[0];
   const todayCount = appointments.filter(a => a.date === today && a.status === AppointmentStatus.CONFIRMED).length;
   const pendingCount = appointments.filter(a => a.status === AppointmentStatus.PENDING).length;
@@ -87,8 +103,6 @@ export const Dashboard: React.FC = () => {
             </div>
         </div>
       </div>
-
-      {loading && <div className="fixed top-0 left-0 w-full h-1.5 bg-teal-500 animate-pulse z-50"></div>}
 
       {/* Controls */}
       <div className="flex flex-col md:flex-row gap-4 mb-6">
@@ -123,73 +137,84 @@ export const Dashboard: React.FC = () => {
         >
             <Download className="w-5 h-5 mr-2" /> Export
         </button>
+        <button 
+            onClick={() => loadData()}
+            className="px-5 py-3 bg-teal-100 text-teal-800 rounded-xl hover:bg-teal-200 transition-colors font-medium whitespace-nowrap flex items-center"
+        >
+           <RefreshCw className="w-5 h-5 mr-2" /> Refresh
+        </button>
       </div>
 
-      {/* List */}
-      <div className="space-y-4">
-        {filteredAppointments.length === 0 ? (
-          <div className="text-center py-20 bg-slate-50 dark:bg-slate-800 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700">
-            <p className="text-xl text-slate-500">No appointments found.</p>
-          </div>
-        ) : (
-          filteredAppointments.map((appt) => (
-            <div key={appt.id} className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 transition-all hover:shadow-md">
-              <div className="flex flex-col lg:flex-row justify-between gap-6 items-center">
-                
-                {/* Info */}
-                <div className="flex-1 w-full">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
-                      {appt.patient.name}
-                    </h3>
-                    <span className={`px-4 py-1.5 rounded-full text-sm font-bold uppercase tracking-wide ${
-                        appt.status === 'CONFIRMED' ? 'bg-green-100 text-green-800' :
-                        appt.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                        appt.status === 'CANCELLED' ? 'bg-red-100 text-red-800' : 'bg-slate-100'
-                    }`}>
-                      {appt.status}
-                    </span>
-                  </div>
+      {loading ? (
+        <div className="flex justify-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600"></div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filteredAppointments.length === 0 ? (
+            <div className="text-center py-20 bg-slate-50 dark:bg-slate-800 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700">
+              <p className="text-xl text-slate-500">No appointments found.</p>
+            </div>
+          ) : (
+            filteredAppointments.map((appt) => (
+              <div key={appt.id} className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 transition-all hover:shadow-md">
+                <div className="flex flex-col lg:flex-row justify-between gap-6 items-center">
                   
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-8 text-lg text-slate-600 dark:text-slate-400">
-                    <div className="flex items-center"><Phone className="w-5 h-5 mr-3 text-slate-400"/> {appt.patient.phone}</div>
-                    <div className="flex items-center"><Calendar className="w-5 h-5 mr-3 text-slate-400"/> {appt.date}</div>
-                    <div className="flex items-center font-semibold text-teal-700 dark:text-teal-400"><Clock className="w-5 h-5 mr-3"/> {appt.timeSlot}</div>
+                  {/* Info */}
+                  <div className="flex-1 w-full">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+                        {appt.patient.name}
+                      </h3>
+                      <span className={`px-4 py-1.5 rounded-full text-sm font-bold uppercase tracking-wide ${
+                          appt.status === 'CONFIRMED' ? 'bg-green-100 text-green-800' :
+                          appt.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                          appt.status === 'CANCELLED' ? 'bg-red-100 text-red-800' : 'bg-slate-100'
+                      }`}>
+                        {appt.status}
+                      </span>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-8 text-lg text-slate-600 dark:text-slate-400">
+                      <div className="flex items-center"><Phone className="w-5 h-5 mr-3 text-slate-400"/> {appt.patient.phone}</div>
+                      <div className="flex items-center"><Calendar className="w-5 h-5 mr-3 text-slate-400"/> {appt.date}</div>
+                      <div className="flex items-center font-semibold text-teal-700 dark:text-teal-400"><Clock className="w-5 h-5 mr-3"/> {appt.timeSlot}</div>
+                    </div>
                   </div>
-                </div>
 
-                {/* Actions */}
-                <div className="flex flex-row gap-3 w-full lg:w-auto justify-end">
-                  {appt.status === AppointmentStatus.PENDING && (
-                    <>
+                  {/* Actions */}
+                  <div className="flex flex-row gap-3 w-full lg:w-auto justify-end">
+                    {appt.status === AppointmentStatus.PENDING && (
+                      <>
+                        <button 
+                          onClick={() => handleStatusChange(appt, AppointmentStatus.CONFIRMED)}
+                          className="flex-1 lg:flex-none bg-teal-600 hover:bg-teal-700 text-white px-6 py-3 rounded-xl text-lg font-bold transition-colors flex items-center justify-center shadow-md"
+                        >
+                          <Check className="w-5 h-5 mr-2" /> Accept
+                        </button>
+                        <button 
+                          onClick={() => handleStatusChange(appt, AppointmentStatus.CANCELLED)}
+                          className="flex-1 lg:flex-none bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600 px-6 py-3 rounded-xl text-lg font-bold transition-colors flex items-center justify-center"
+                        >
+                          <X className="w-5 h-5 mr-2" /> Decline
+                        </button>
+                      </>
+                    )}
+                    {appt.status === AppointmentStatus.CONFIRMED && (
                       <button 
-                        onClick={() => handleStatusChange(appt, AppointmentStatus.CONFIRMED)}
-                        className="flex-1 lg:flex-none bg-teal-600 hover:bg-teal-700 text-white px-6 py-3 rounded-xl text-lg font-bold transition-colors flex items-center justify-center shadow-md"
+                        onClick={() => handleStatusChange(appt, AppointmentStatus.COMPLETED)}
+                        className="w-full lg:w-auto bg-slate-800 hover:bg-slate-900 text-white px-6 py-3 rounded-xl font-bold transition-colors"
                       >
-                        <Check className="w-5 h-5 mr-2" /> Accept
+                        Mark Completed
                       </button>
-                      <button 
-                        onClick={() => handleStatusChange(appt, AppointmentStatus.CANCELLED)}
-                        className="flex-1 lg:flex-none bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600 px-6 py-3 rounded-xl text-lg font-bold transition-colors flex items-center justify-center"
-                      >
-                        <X className="w-5 h-5 mr-2" /> Decline
-                      </button>
-                    </>
-                  )}
-                  {appt.status === AppointmentStatus.CONFIRMED && (
-                    <button 
-                      onClick={() => handleStatusChange(appt, AppointmentStatus.COMPLETED)}
-                      className="w-full lg:w-auto bg-slate-800 hover:bg-slate-900 text-white px-6 py-3 rounded-xl font-bold transition-colors"
-                    >
-                      Mark Completed
-                    </button>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
-        )}
-      </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 };

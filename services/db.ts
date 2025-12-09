@@ -1,79 +1,137 @@
+import { db, isFirebaseConfigured } from '../lib/firebase';
+import { collection, addDoc, getDocs, doc, updateDoc, query, where } from 'firebase/firestore';
 import { Appointment, AppointmentStatus } from '../types';
 
-const STORAGE_KEY = 'orthocare_appointments';
+const APPOINTMENTS_COLLECTION = 'appointments';
+const LOCAL_STORAGE_KEY = 'smilefree_appointments_backup';
 
-// Seed initial data if empty
-const seedData = () => {
-  const existing = localStorage.getItem(STORAGE_KEY);
-  if (!existing) {
-    const mockAppointments: Appointment[] = [
-      {
-        id: 'mock-1',
-        patient: {
-          name: 'Sarah Perera',
-          age: 24,
-          email: 'sarah.p@example.com',
-          phone: '0771234567'
-        },
-        date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-        timeSlot: '10:00 AM',
-        problemDescription: 'Interested in invisible aligners for gap correction.',
-        status: AppointmentStatus.PENDING,
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: 'mock-2',
-        patient: {
-          name: 'John Silva',
-          age: 14,
-          email: 'john.dad@example.com',
-          phone: '0719876543'
-        },
-        date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
-        timeSlot: '04:00 PM',
-        problemDescription: 'Regular braces tightening checkup.',
-        status: AppointmentStatus.COMPLETED,
-        createdAt: new Date().toISOString()
-      }
-    ];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(mockAppointments));
+// --- LOCAL STORAGE HELPERS (Fallback) ---
+const getLocalAppointments = (): Appointment[] => {
+  try {
+    const data = localStorage.getItem(LOCAL_STORAGE_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    return [];
   }
 };
 
-seedData();
-
-export const getAppointments = (): Appointment[] => {
-  const data = localStorage.getItem(STORAGE_KEY);
-  return data ? JSON.parse(data) : [];
+const saveLocalAppointment = (appt: Appointment) => {
+  const current = getLocalAppointments();
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify([...current, appt]));
 };
 
-export const saveAppointment = (appointment: Appointment): void => {
-  const appointments = getAppointments();
-  appointments.push(appointment);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(appointments));
+const updateLocalStatus = (id: string, status: AppointmentStatus) => {
+  const current = getLocalAppointments();
+  const updated = current.map(a => a.id === id ? { ...a, status } : a);
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
 };
 
-export const updateAppointmentStatus = (id: string, status: AppointmentStatus): void => {
-  const appointments = getAppointments();
-  const index = appointments.findIndex(a => a.id === id);
-  if (index !== -1) {
-    appointments[index].status = status;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(appointments));
-  }
-};
+// --- MAIN EXPORTS ---
 
-export const getAvailableSlots = (date: string): string[] => {
-  // Logic to filter out taken slots for a specific date
-  const appointments = getAppointments();
-  const takenSlots = appointments
-    .filter(a => a.date === date && a.status !== AppointmentStatus.CANCELLED)
-    .map(a => a.timeSlot);
+// Fetch all appointments
+export const getAppointments = async (): Promise<Appointment[]> => {
+  // 1. Live Mode
+  if (isFirebaseConfigured && db) {
+    try {
+      const querySnapshot = await getDocs(collection(db, APPOINTMENTS_COLLECTION));
+      const appointments: Appointment[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data() as Omit<Appointment, 'id'>;
+        appointments.push({ id: doc.id, ...data });
+      });
+      return appointments;
+    } catch (error) {
+      console.error("Error fetching from Firebase:", error);
+      return [];
+    }
+  } 
   
+  // 2. Demo Mode
+  return new Promise((resolve) => {
+    setTimeout(() => resolve(getLocalAppointments()), 500); // Simulate network delay
+  });
+};
+
+// Save a new appointment
+export const saveAppointment = async (appointmentData: Omit<Appointment, 'id'>): Promise<string> => {
+  // 1. Live Mode
+  if (isFirebaseConfigured && db) {
+    try {
+      const docRef = await addDoc(collection(db, APPOINTMENTS_COLLECTION), appointmentData);
+      return docRef.id;
+    } catch (error) {
+      console.error("Error saving to Firebase:", error);
+      throw error;
+    }
+  }
+
+  // 2. Demo Mode
+  return new Promise((resolve) => {
+    const newId = 'local-' + Math.random().toString(36).substr(2, 9);
+    const newAppt: Appointment = { id: newId, ...appointmentData };
+    saveLocalAppointment(newAppt);
+    setTimeout(() => resolve(newId), 500);
+  });
+};
+
+// Update status
+export const updateAppointmentStatus = async (id: string, status: AppointmentStatus): Promise<void> => {
+  // 1. Live Mode
+  if (isFirebaseConfigured && db) {
+    try {
+      const appointmentRef = doc(db, APPOINTMENTS_COLLECTION, id);
+      await updateDoc(appointmentRef, { status: status });
+      return;
+    } catch (error) {
+      console.error("Error updating in Firebase:", error);
+      throw error;
+    }
+  }
+
+  // 2. Demo Mode
+  return new Promise((resolve) => {
+    updateLocalStatus(id, status);
+    setTimeout(() => resolve(), 300);
+  });
+};
+
+// Get available slots
+export const getAvailableSlots = async (date: string): Promise<string[]> => {
   const allSlots = [
     '09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM', 
     '11:00 AM', '11:30 AM', '02:00 PM', '02:30 PM', 
     '03:00 PM', '03:30 PM', '04:00 PM', '04:30 PM'
   ];
 
-  return allSlots.filter(slot => !takenSlots.includes(slot));
+  // 1. Live Mode
+  if (isFirebaseConfigured && db) {
+    try {
+      const q = query(
+        collection(db, APPOINTMENTS_COLLECTION), 
+        where("date", "==", date)
+      );
+      const querySnapshot = await getDocs(q);
+      
+      const takenSlots: string[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data() as Appointment;
+        if (data.status !== AppointmentStatus.CANCELLED) {
+          takenSlots.push(data.timeSlot);
+        }
+      });
+      return allSlots.filter(slot => !takenSlots.includes(slot));
+    } catch (error) {
+      console.error("Firebase slot error, falling back", error);
+    }
+  }
+
+  // 2. Demo Mode
+  return new Promise((resolve) => {
+    const appointments = getLocalAppointments();
+    const taken = appointments
+      .filter(a => a.date === date && a.status !== AppointmentStatus.CANCELLED)
+      .map(a => a.timeSlot);
+    
+    setTimeout(() => resolve(allSlots.filter(s => !taken.includes(s))), 400);
+  });
 };

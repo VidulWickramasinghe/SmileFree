@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, Moon, Sun, Stethoscope, LogIn, Phone, Type } from 'lucide-react';
+import { Menu, X, Moon, Sun, Stethoscope, LogIn, Phone, Type, Github, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { isFirebaseConfigured } from '../lib/firebase';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -19,7 +20,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     setLargeText(!largeText);
   };
 
-  // Base classes applied to the wrapper to handle global font size increase
   const wrapperClass = largeText ? 'text-lg md:text-xl' : 'text-base';
 
   const NavLink = ({ to, label, mobile = false }: { to: string; label: string; mobile?: boolean }) => {
@@ -41,6 +41,15 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
   return (
     <div className={`min-h-screen flex flex-col bg-slate-50 dark:bg-slate-900 transition-colors duration-200 ${wrapperClass}`}>
+      
+      {/* System Status Banner */}
+      {!isFirebaseConfigured && (
+        <div className="bg-red-600 text-white text-center py-2 px-4 text-sm font-bold flex items-center justify-center gap-2">
+          <AlertTriangle className="w-4 h-4" />
+          <span>DEMO MODE: Data is saved locally. Configure Firebase in 'lib/firebase.ts' to go live.</span>
+        </div>
+      )}
+
       {/* Navigation */}
       <nav className="sticky top-0 z-50 bg-white dark:bg-slate-900 shadow-md border-b border-slate-200 dark:border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -80,9 +89,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 {isDark ? <Sun className="h-6 w-6" /> : <Moon className="h-6 w-6" />}
               </button>
 
-              <a href="tel:+94112345678" className="ml-4 flex items-center px-5 py-3 text-base font-bold text-white bg-teal-600 rounded-xl hover:bg-teal-700 transition-colors shadow-md">
+              <a href="tel:0718385476" className="ml-4 flex items-center px-5 py-3 text-base font-bold text-white bg-teal-600 rounded-xl hover:bg-teal-700 transition-colors shadow-md">
                 <Phone className="h-5 w-5 mr-2" />
-                Call Clinic
+                071 8385476
               </a>
 
               {isAuthenticated ? (
@@ -130,7 +139,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               {isAuthenticated && <NavLink to="/dashboard" label="Doctor Dashboard" mobile /> }
               
               <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-800 flex flex-col gap-4">
-                 <a href="tel:+94112345678" className="w-full flex items-center justify-center px-5 py-4 text-lg font-bold text-white bg-teal-600 rounded-xl shadow-md">
+                 <a href="tel:0718385476" className="w-full flex items-center justify-center px-5 py-4 text-lg font-bold text-white bg-teal-600 rounded-xl shadow-md">
                   <Phone className="h-6 w-6 mr-2" />
                   Call Clinic
                 </a>
@@ -178,7 +187,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <ul className="space-y-4 text-slate-300 text-lg">
                 <li className="flex items-start"><span className="opacity-70 mr-3">📍</span> 376/A/2, Meewathura<br/>Peradeniya, Sri Lanka</li>
                 <li className="flex items-center"><span className="opacity-70 mr-3">📧</span> vidulexams2@gmail.com</li>
-                <li className="flex items-center"><span className="opacity-70 mr-3">📞</span> +94 11 234 5678</li>
+                <li className="flex items-center"><span className="opacity-70 mr-3">📞</span> 071 8385476</li>
               </ul>
             </div>
             <div>
@@ -190,11 +199,21 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               </ul>
             </div>
           </div>
-          <div className="mt-12 border-t border-slate-800 pt-8 flex flex-col md:flex-row justify-between items-center text-sm text-slate-500">
-            <p>&copy; {new Date().getFullYear()} Dr. Chandima Weerasekera. All rights reserved.</p>
-            <div className="flex space-x-6 mt-4 md:mt-0">
-                <Link to="/login" className="hover:text-teal-400">Admin</Link>
-                <a href="#" className="hover:text-teal-400">Privacy Policy</a>
+          
+          <div className="mt-12 border-t border-slate-800 pt-8 flex flex-col lg:flex-row justify-between items-center text-sm text-slate-500 gap-4">
+            <div className="flex flex-col md:flex-row gap-2 md:gap-8 items-center">
+               <p>&copy; {new Date().getFullYear()} Dr. Chandima Weerasekera. All rights reserved.</p>
+               <div className="flex space-x-6">
+                  <Link to="/login" className="hover:text-teal-400">Admin</Link>
+                  <a href="#" className="hover:text-teal-400">Privacy Policy</a>
+              </div>
+            </div>
+            
+            <div className="text-center lg:text-right bg-slate-800/50 px-6 py-3 rounded-xl border border-slate-800">
+               <p className="font-medium text-slate-400 mb-1">
+                 Developed by <a href="https://github.com/stevyOP" target="_blank" rel="noopener noreferrer" className="text-teal-400 hover:text-teal-300 flex items-center justify-center lg:justify-end gap-1 inline-flex">Vidul Wickramasinghe <Github className="w-3 h-3"/></a>
+               </p>
+               <p className="text-slate-600 text-xs tracking-wider">Dev Contact: 070-7450675</p>
             </div>
           </div>
         </div>

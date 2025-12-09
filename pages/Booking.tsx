@@ -13,6 +13,7 @@ export const Booking: React.FC = () => {
   const [selectedSlot, setSelectedSlot] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -27,11 +28,10 @@ export const Booking: React.FC = () => {
   useEffect(() => {
     if (date) {
       setLoading(true);
-      setTimeout(() => {
-        const available = getAvailableSlots(date);
+      getAvailableSlots(date).then(available => {
         setSlots(available);
         setLoading(false);
-      }, 500);
+      });
     }
   }, [date]);
 
@@ -39,34 +39,38 @@ export const Booking: React.FC = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const generateId = () => {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMsg('');
 
     const newAppointment = {
-      id: generateId(),
       patient: {
         name: formData.name,
-        age: 0, // Simplified flow doesn't ask age explicitly
+        age: 0,
         email: formData.email,
         phone: formData.phone
       },
       date: date,
       timeSlot: selectedSlot,
-      problemDescription: 'General Consultation', // Default
+      problemDescription: 'General Consultation',
       status: AppointmentStatus.PENDING,
       createdAt: new Date().toISOString()
     };
 
-    saveAppointment(newAppointment);
-    await notifyDoctorNewBooking(newAppointment);
-
-    setLoading(false);
-    setSuccess(true);
+    try {
+      // Save to Cloud Firestore
+      const id = await saveAppointment(newAppointment);
+      // Trigger Email
+      await notifyDoctorNewBooking({ id, ...newAppointment });
+      
+      setLoading(false);
+      setSuccess(true);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg("Failed to book appointment. Please check your internet connection.");
+      setLoading(false);
+    }
   };
 
   if (success) {
@@ -108,6 +112,11 @@ export const Booking: React.FC = () => {
         </div>
 
         <div className="p-6 md:p-12">
+          {errorMsg && (
+             <div className="mb-6 bg-red-50 text-red-600 p-4 rounded-xl border border-red-100">
+               {errorMsg}
+             </div>
+          )}
           {step === 1 && (
             <div className="space-y-8">
               <div>
@@ -219,7 +228,7 @@ export const Booking: React.FC = () => {
                 <button 
                   type="submit"
                   disabled={loading}
-                  className="px-10 py-4 bg-teal-600 text-white rounded-xl font-bold text-xl hover:bg-teal-700 transition-colors flex items-center shadow-lg"
+                  className="px-10 py-4 bg-teal-600 text-white rounded-xl font-bold text-xl hover:bg-teal-700 transition-colors flex items-center shadow-lg disabled:opacity-70"
                 >
                   {loading ? 'Processing...' : 'Confirm Booking'}
                 </button>

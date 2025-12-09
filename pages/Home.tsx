@@ -31,7 +31,7 @@ export const Home: React.FC = () => {
                   <Calendar className="mr-3 h-6 w-6" />
                   Book Appointment
                 </Link>
-                <a href="tel:+94112345678" className="inline-flex justify-center items-center px-8 py-5 text-xl font-bold rounded-xl text-teal-700 bg-white border-2 border-teal-100 hover:border-teal-300 hover:bg-teal-50 transition-colors">
+                <a href="tel:0718385476" className="inline-flex justify-center items-center px-8 py-5 text-xl font-bold rounded-xl text-teal-700 bg-white border-2 border-teal-100 hover:border-teal-300 hover:bg-teal-50 transition-colors">
                   <Phone className="mr-3 h-6 w-6" />
                   Call Clinic
                 </a>
